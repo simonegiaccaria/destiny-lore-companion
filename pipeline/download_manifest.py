@@ -1,7 +1,8 @@
 """Download and snapshot the Destiny 2 manifest tables we need.
 
 Downloads the JSON world-component tables (per language) and stores them
-under data/manifest/<version>/<lang>/<Table>.json, plus a 'current' symlink.
+under data/manifest/<version>/<lang>/<Table>.json, plus a 'current.txt'
+version pointer.
 Everything is kept on disk permanently: the game is in maintenance mode and
 this snapshot is the project's insurance against the API going dark.
 
@@ -92,12 +93,22 @@ def main() -> None:
                 continue
             print(f"  -> {lang}/{table} ...")
             data = _get(session, BASE + path)
-            dest.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            # Atomic write: dump to a temp file, then rename. The rename is
+            # atomic only because tmp and dest share the same directory
+            # (same filesystem) — do not "tidy" tmp files elsewhere.
+            # Guarantees: if dest exists, it is complete; a crash mid-write
+            # leaves only a harmless .json.tmp that the retry overwrites.
+            tmp = dest.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(dest)
             print(f"     {len(data):>7} definitions")
 
     # Version pointer file (NOT a symlink: symlinks need admin rights on
     # Windows). Downstream steps read this to find the current snapshot.
-    (DATA / "current.txt").write_text(version, encoding="utf-8")
+    pointer = DATA / "current.txt"
+    tmp = pointer.with_suffix(".txt.tmp")
+    tmp.write_text(version, encoding="utf-8")
+    tmp.replace(pointer)
     print(f"Snapshot complete: {out_root}")
 
 
