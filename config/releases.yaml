@@ -1,0 +1,219 @@
+# ---------------------------------------------------------------------------
+# Hand-curated release map. THIS FILE ENCODES EDITORIAL JUDGMENT, NOT API DATA.
+# Verify every flag before trusting it — especially `vaulted`, which drives
+# the "vaulted = known to everyone" spoiler policy, and `spoils`, which
+# drives the pre-spoiler warning for vaulted lore that foreshadows content
+# that is still playable.
+#
+# vaulted: true  -> content cannot be played anymore; its lore is treated as
+#                   common knowledge for every user (project policy).
+# spoils: [...]  -> releases whose playable story this content foreshadows.
+#                   The Ghost warns before answering from these chunks when
+#                   the user hasn't finished the spoiled release (Phase 2).
+#
+# NOTE: some vaulted releases had parts return to the game later (exotic
+# missions, reprised activities). `vaulted` is per-release here; per-content
+# overrides can be added under `overrides:` when we hit real cases.
+# ---------------------------------------------------------------------------
+
+releases:
+  # ----- Destiny 1 era: fully unplayable on PC, grimoire = common knowledge
+  - id: d1_grimoire
+    name: "Destiny 1 (Grimoire)"
+    date: 2014-09-09
+    vaulted: true
+    spoils: []
+
+  # ----- Year 1 (all vaulted Nov 2020, Beyond Light DCV)
+  - id: red_war
+    name: "The Red War"
+    date: 2017-09-06
+    vaulted: true
+    spoils: []
+  - id: curse_of_osiris
+    name: "Curse of Osiris"
+    date: 2017-12-05
+    vaulted: true
+    spoils: []
+  - id: warmind
+    name: "Warmind"
+    date: 2018-05-08
+    vaulted: true
+    spoils: []
+
+  # ----- Year 2
+  - id: forsaken
+    name: "Forsaken"
+    date: 2018-09-04
+    vaulted: true            # campaign + Tangled Shore vaulted Feb 2022; Dreaming City remains — first candidate for overrides
+    spoils: [witch_queen]    # Savathun threads seeded here pay off in WQ
+  - id: black_armory
+    name: "Season of the Forge / Black Armory"
+    date: 2018-12-04
+    vaulted: true
+    spoils: []
+  - id: season_drifter
+    name: "Season of the Drifter"
+    date: 2019-03-05
+    vaulted: true
+    spoils: []
+  - id: season_opulence
+    name: "Season of Opulence"
+    date: 2019-06-04
+    vaulted: true
+    spoils: []
+
+  # ----- Year 3
+  - id: shadowkeep
+    name: "Shadowkeep"
+    date: 2019-10-01
+    vaulted: false
+    spoils: []
+  - id: season_undying
+    name: "Season of the Undying"
+    date: 2019-10-01
+    vaulted: true
+    spoils: []
+  - id: season_dawn
+    name: "Season of Dawn"
+    date: 2019-12-10
+    vaulted: true
+    spoils: []
+  - id: season_worthy
+    name: "Season of the Worthy"
+    date: 2020-03-10
+    vaulted: true
+    spoils: []
+  - id: season_arrivals
+    name: "Season of Arrivals"
+    date: 2020-06-09
+    vaulted: true
+    spoils: [beyond_light]
+
+  # ----- Year 4
+  - id: beyond_light
+    name: "Beyond Light"
+    date: 2020-11-10
+    vaulted: false
+    spoils: []
+  - id: season_hunt
+    name: "Season of the Hunt"
+    date: 2020-11-17
+    vaulted: true
+    spoils: []
+  - id: season_chosen
+    name: "Season of the Chosen"
+    date: 2021-02-09
+    vaulted: true
+    spoils: []
+  - id: season_splicer
+    name: "Season of the Splicer"
+    date: 2021-05-11
+    vaulted: true
+    spoils: []
+  - id: season_lost
+    name: "Season of the Lost"
+    date: 2021-08-24
+    vaulted: true
+    spoils: [witch_queen]    # directly sets up WQ — the canonical warning case
+
+  # ----- Year 5
+  - id: witch_queen
+    name: "The Witch Queen"
+    date: 2022-02-22
+    vaulted: false
+    spoils: []
+  - id: season_risen
+    name: "Season of the Risen"
+    date: 2022-02-22
+    vaulted: true
+    spoils: []
+  - id: season_haunted
+    name: "Season of the Haunted"
+    date: 2022-05-24
+    vaulted: true
+    spoils: []
+  - id: season_plunder
+    name: "Season of Plunder"
+    date: 2022-08-23
+    vaulted: true
+    spoils: []
+  - id: season_seraph
+    name: "Season of the Seraph"
+    date: 2022-12-06
+    vaulted: true
+    spoils: [lightfall]
+
+  # ----- Year 6
+  - id: lightfall
+    name: "Lightfall"
+    date: 2023-02-28
+    vaulted: false
+    spoils: []
+  - id: season_defiance
+    name: "Season of Defiance"
+    date: 2023-02-28
+    vaulted: true
+    spoils: []
+  - id: season_deep
+    name: "Season of the Deep"
+    date: 2023-05-23
+    vaulted: true
+    spoils: []
+  - id: season_witch
+    name: "Season of the Witch"
+    date: 2023-08-22
+    vaulted: true
+    spoils: [final_shape]
+  - id: season_wish
+    name: "Season of the Wish"
+    date: 2023-11-28
+    vaulted: true
+    spoils: [final_shape]
+
+  # ----- Year 7
+  - id: final_shape
+    name: "The Final Shape"
+    date: 2024-06-04
+    vaulted: false
+    spoils: []
+  - id: episode_echoes
+    name: "Episode: Echoes"
+    date: 2024-06-11
+    vaulted: false           # VERIFY: episode availability post-Monument of Triumph
+    spoils: []
+  - id: episode_revenant
+    name: "Episode: Revenant"
+    date: 2024-10-08
+    vaulted: false           # VERIFY
+    spoils: []
+  - id: episode_heresy
+    name: "Episode: Heresy"
+    date: 2025-02-04
+    vaulted: false           # VERIFY
+    spoils: []
+
+  # ----- Year 8 / Frontiers
+  - id: edge_of_fate
+    name: "The Edge of Fate"
+    date: 2025-07-15
+    vaulted: false
+    spoils: []
+  - id: renegades
+    name: "Renegades"
+    date: 2025-12-02
+    vaulted: false
+    spoils: []
+
+  # ----- Final update (game now in maintenance mode)
+  - id: monument_of_triumph
+    name: "Monument of Triumph (final update)"
+    date: 2026-06-09
+    vaulted: false
+    spoils: []
+
+# Per-content overrides (populate when real cases appear), e.g.:
+# overrides:
+#   - lore_hash: 123456789
+#     vaulted: false   # Dreaming City lore still in game despite Forsaken flag
+overrides: []

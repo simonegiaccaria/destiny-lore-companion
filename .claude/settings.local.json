@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Command *)",
+      "PowerShell(ollama pull *)",
+      "PowerShell(ollama list *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe pipeline\\\\download_manifest.py)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe pipeline\\\\extract_chunks.py)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe pipeline\\\\build_index.py)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "claude-flow"
+  ]
+}
