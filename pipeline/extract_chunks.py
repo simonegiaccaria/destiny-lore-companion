@@ -48,7 +48,7 @@ def _manifest_dir() -> Path:
     pointer = ROOT / "data" / "manifest" / "current.txt"
     if not pointer.exists():
         sys.exit("No manifest snapshot. Run pipeline/download_manifest.py first.")
-    return ROOT / "data" / "manifest" / pointer.read_text().strip()
+    return ROOT / "data" / "manifest" / pointer.read_text(encoding="utf-8").strip()
 
 
 MANIFEST = None  # resolved in main()
@@ -62,7 +62,7 @@ def load_table(lang: str, table: str) -> dict:
     path = MANIFEST / lang / f"{table}.json"
     if not path.exists():
         sys.exit(f"Missing {path}. Run pipeline/download_manifest.py first.")
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 TAG_RE = re.compile(r"<[^>]+>")
@@ -83,7 +83,7 @@ def norm_key(text: str) -> str:
 
 
 def load_releases() -> tuple[dict, dict]:
-    cfg = yaml.safe_load((ROOT / "config" / "releases.yaml").read_text())
+    cfg = yaml.safe_load((ROOT / "config" / "releases.yaml").read_text(encoding="utf-8"))
     by_id = {r["id"]: r for r in cfg["releases"]}
     overrides = {o["lore_hash"]: o for o in (cfg.get("overrides") or [])}
     return by_id, overrides
@@ -195,7 +195,7 @@ def main() -> None:
     n_lore = n_flavor = n_dup = 0
     seen_flavor: set[str] = set()
 
-    with chunks_path.open("w") as out:
+    with chunks_path.open("w", encoding="utf-8") as out:
         # lore entries: one entry = one chunk (self-contained narrative unit)
         for lh_str, entry in lore.items():
             lh = int(lh_str)
@@ -254,7 +254,7 @@ def main() -> None:
     for pages in books.values():
         pages.sort(key=lambda p: p["order"])
     (OUT_CHUNKS / "books.json").write_text(
-        json.dumps(books, ensure_ascii=False, indent=1))
+        json.dumps(books, ensure_ascii=False, indent=1), encoding="utf-8")
 
     # ---- localized lookup layer (README rule #1: presentation only) ----
     db = sqlite3.connect(OUT_LOOKUP / "strings.sqlite")
@@ -279,7 +279,7 @@ def main() -> None:
 
     print(f"chunks: {n_lore} lore entries, {n_flavor} flavour texts "
           f"({n_dup} reissue duplicates dropped)")
-    unknown = sum(1 for line in chunks_path.open()
+    unknown = sum(1 for line in chunks_path.open(encoding="utf-8")
                   if '"release": "unknown"' in line)
     print(f"release attribution: {unknown} chunks 'unknown' "
           f"(expected in Phase 1 — improves with Ishtar dates in Phase 3)")

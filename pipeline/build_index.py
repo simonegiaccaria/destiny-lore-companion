@@ -65,7 +65,7 @@ def main() -> None:
 
     ids, docs, metas, fts_rows = [], [], [], []
     total = 0
-    with CHUNKS.open() as fh:
+    with CHUNKS.open(encoding="utf-8") as fh:
         for line in fh:
             c = json.loads(line)
             for i, part in enumerate(split_long(c["text"])):

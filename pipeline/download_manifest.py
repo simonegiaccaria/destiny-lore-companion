@@ -92,12 +92,12 @@ def main() -> None:
                 continue
             print(f"  -> {lang}/{table} ...")
             data = _get(session, BASE + path)
-            dest.write_text(json.dumps(data, ensure_ascii=False))
+            dest.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
             print(f"     {len(data):>7} definitions")
 
     # Version pointer file (NOT a symlink: symlinks need admin rights on
     # Windows). Downstream steps read this to find the current snapshot.
-    (DATA / "current.txt").write_text(version)
+    (DATA / "current.txt").write_text(version, encoding="utf-8")
     print(f"Snapshot complete: {out_root}")
 
 
