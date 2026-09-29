@@ -1,4 +1,4 @@
-"""FastAPI server: Ghost chat (streaming) + lore-book wiki.
+﻿"""FastAPI server: Ghost chat (streaming) + lore-book wiki.
 
 Run:  uvicorn app.server:app --host 0.0.0.0 --port 8000
 Then open http://<lan-ip>:8000 from your phone.
@@ -23,7 +23,7 @@ from app.retrieval import Retriever          # noqa: E402
 
 app = FastAPI(title="Destiny Lore Companion")
 retriever: Retriever | None = None
-BOOKS = json.loads((ROOT / "data" / "chunks" / "books.json").read_text()) \
+BOOKS = json.loads((ROOT / "data" / "chunks" / "books.json").read_text(encoding="utf-8")) \
     if (ROOT / "data" / "chunks" / "books.json").exists() else {}
 
 
@@ -74,4 +74,5 @@ def api_book(name: str):
 
 @app.get("/", response_class=HTMLResponse)
 def index():
-    return (ROOT / "app" / "static" / "index.html").read_text()
+    return (ROOT / "app" / "static" / "index.html").read_text(encoding="utf-8")
+

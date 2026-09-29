@@ -88,7 +88,9 @@ copy .env.example .env
 # edit .env: set BUNGIE_API_KEY, optionally LANGUAGES=en,it
 
 # 5. Local LLM (skip if using a commercial API)
-#    install Ollama from https://ollama.com, then:
+#    install Ollama from https://ollama.com or with the following command pasted on PowerShell:
+irm https://ollama.com/install.ps1 | iex
+#    then:
 ollama pull llama3.1:8b-instruct-q5_K_M
 
 # 6. Pipeline (in order)

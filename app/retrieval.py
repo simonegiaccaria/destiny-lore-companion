@@ -1,8 +1,15 @@
-"""Hybrid retrieval: semantic (Chroma) + keyword (FTS5), fused with RRF.
+"""Hybrid retrieval: semantic (Chroma) + keyword (FTS5), fused with RRF,
+then balanced by source type.
+
+Why the quota (see docs/decisions.md #9): flavour texts outnumber lore
+entries by an order of magnitude and are ~10 words long, so both semantic
+and keyword search favour them for short queries. Unconstrained, the top-k
+is all one-line item quotes and the model has nothing real to ground on.
+Pools are therefore filled per source_type, not by global rank.
 
 Phase 2 note: spoiler-gating is a metadata filter here, not a new system.
-`retrieve(..., unlocked_records=set_of_hashes)` already implements the
-policy 'chunk is visible if vaulted OR its unlock record is in the set'.
+`retrieve(..., unlocked_records=set_of_hashes)` implements the policy
+'chunk is visible if vaulted OR its unlock record is in the set'.
 In Phase 1 pass unlocked_records=None -> no gating.
 """
 
@@ -21,13 +28,18 @@ INDEX_DIR = ROOT / "data" / "index"
 
 RRF_K = 60  # standard reciprocal-rank-fusion constant
 
+# How many hits each source type may contribute to the final k.
+# Tune here, not in the caller: this is a corpus property, not a per-query one.
+DEFAULT_QUOTAS = {"lore_entry": 6, "flavor_text": 2}
+
 
 @dataclass
 class Hit:
     id: str
     text: str
     meta: dict
-    score: float = 0.0
+    score: float = 0.0          # RRF score: rank-based, NOT a quality measure
+    sim: float | None = None    # raw cosine similarity, for diagnostics
     spoils: list[str] = field(default_factory=list)
 
 
@@ -40,12 +52,15 @@ class Retriever:
         self.fts_path = INDEX_DIR / "fts.sqlite"
 
     # -- semantic ---------------------------------------------------------
-    def _semantic(self, query: str, k: int) -> list[tuple[str, str, dict]]:
+    def _semantic(self, query: str, k: int) -> list[tuple[str, str, dict, float]]:
         emb = self.model.encode([query], normalize_embeddings=True)
         res = self.col.query(query_embeddings=emb.tolist(), n_results=k,
-                             include=["documents", "metadatas"])
-        return list(zip(res["ids"][0], res["documents"][0],
-                        res["metadatas"][0]))
+                             include=["documents", "metadatas", "distances"])
+        out = []
+        for cid, doc, meta, dist in zip(res["ids"][0], res["documents"][0],
+                                        res["metadatas"][0], res["distances"][0]):
+            out.append((cid, doc, meta, 1.0 - float(dist)))  # cosine similarity
+        return out
 
     # -- keyword ----------------------------------------------------------
     def _keyword(self, query: str, k: int) -> list[tuple[str, str, dict]]:
@@ -76,15 +91,20 @@ class Retriever:
         res = self.col.get(ids=[cid], include=["metadatas"])
         return res["metadatas"][0] if res["ids"] else {}
 
-    # -- fusion + policy filter --------------------------------------------
+    # -- fusion + quota + policy filter ------------------------------------
     def retrieve(self, query: str, k: int = 8,
-                 unlocked_records: set[int] | None = None) -> list[Hit]:
-        pool = max(k * 4, 24)
+                 unlocked_records: set[int] | None = None,
+                 quotas: dict[str, int] | None = None) -> list[Hit]:
+        quotas = dict(quotas or DEFAULT_QUOTAS)
+        # Pool must be deep enough that the minority source type is present
+        # at all — the whole point is that it loses on global rank.
+        pool = max(k * 12, 120)
         ranked: dict[str, Hit] = {}
 
-        for rank, (cid, doc, meta) in enumerate(self._semantic(query, pool)):
+        for rank, (cid, doc, meta, sim) in enumerate(self._semantic(query, pool)):
             h = ranked.setdefault(cid, Hit(cid, doc, meta))
             h.score += 1.0 / (RRF_K + rank + 1)
+            h.sim = sim if h.sim is None else max(h.sim, sim)
         for rank, (cid, doc, meta) in enumerate(self._keyword(query, pool)):
             h = ranked.setdefault(cid, Hit(cid, doc, meta))
             h.score += 1.0 / (RRF_K + rank + 1)
@@ -99,6 +119,28 @@ class Retriever:
                     in unlocked_records
                     or int(h.meta.get("unlock_record_hash") or 0) == 0]
 
+        # Fill per source type, in rank order within each type.
+        selected: list[Hit] = []
+        remaining = dict(quotas)
+        leftovers: list[Hit] = []
         for h in hits:
+            st = h.meta.get("source_type", "")
+            if remaining.get(st, 0) > 0:
+                remaining[st] -= 1
+                selected.append(h)
+            else:
+                leftovers.append(h)
+            if len(selected) >= k:
+                break
+
+        # If a quota could not be filled (e.g. no lore entry matches at all),
+        # top up with the best remaining hits rather than returning fewer.
+        for h in leftovers:
+            if len(selected) >= k:
+                break
+            selected.append(h)
+
+        selected.sort(key=lambda h: h.score, reverse=True)
+        for h in selected:
             h.spoils = [s for s in (h.meta.get("spoils") or "").split(",") if s]
-        return hits[:k]
+        return selected[:k]

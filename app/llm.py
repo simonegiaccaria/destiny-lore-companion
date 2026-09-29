@@ -1,4 +1,4 @@
-"""One OpenAI-compatible client for both backends (Ollama local / API).
+﻿"""One OpenAI-compatible client for both backends (Ollama local / API).
 
 Swapping backend = editing LLM_BASE_URL / LLM_MODEL / LLM_API_KEY in .env.
 Keep it this way: the local-vs-API decision is empirical (reference
@@ -14,7 +14,7 @@ from pathlib import Path
 from openai import OpenAI
 
 ROOT = Path(__file__).resolve().parents[1]
-PROMPT = (ROOT / "app" / "prompts" / "ghost.md").read_text()
+PROMPT = (ROOT / "app" / "prompts" / "ghost.md").read_text(encoding="utf-8")
 
 
 def _client() -> tuple[OpenAI, str]:
@@ -58,3 +58,4 @@ def answer_stream(question: str, hits, history: list[dict] | None = None
         delta = event.choices[0].delta.content
         if delta:
             yield delta
+
