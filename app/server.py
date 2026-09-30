@@ -49,14 +49,18 @@ def chat(payload: ChatIn):
 # ---------------------------------------------------------------- wiki ----
 
 def _chunk_text(chunk_id: str) -> str:
+    """Reassemble a full entry for the wiki: the base chunk plus every
+    derived piece — sections (#s1, #s2 …) from mixed-voice splitting and
+    parts (#p1 …) from long-entry splitting. Ordering by id puts a
+    section's own parts before the next section ('#p' < '#s')."""
     db = sqlite3.connect(ROOT / "data" / "index" / "fts.sqlite")
     try:
         rows = db.execute(
             "SELECT text FROM lore_fts WHERE id = ? OR id LIKE ? ORDER BY id",
-            (chunk_id, chunk_id + "#p%")).fetchall()
+            (chunk_id, chunk_id + "#%")).fetchall()
     finally:
         db.close()
-    return "\n".join(r[0] for r in rows)
+    return "\n\n".join(r[0] for r in rows)
 
 
 @app.get("/api/books")
@@ -75,4 +79,3 @@ def api_book(name: str):
 @app.get("/", response_class=HTMLResponse)
 def index():
     return (ROOT / "app" / "static" / "index.html").read_text(encoding="utf-8")
-

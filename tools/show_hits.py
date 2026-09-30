@@ -2,10 +2,15 @@
 
 Usage:
     .venv\\Scripts\\python tools\\show_hits.py "What is the Traveler?"
+    .venv\\Scripts\\python tools\\show_hits.py --full "What is the Traveler?"
 
 Diagnostic tool: separates retrieval failures from generation failures.
 If the right fragments are here but the answer ignored them, the problem
 is the prompt/model. If they are not here, the problem is retrieval.
+
+When GRADING an answer, always use --full: judging a claim against a
+truncated chunk (or against memory) has already produced four wrong
+verdicts in this project — the detail was past the cut every time.
 
 Read `sim` (raw cosine similarity), not `rrf`: RRF is rank-based and says
 nothing about how good a match actually is. Roughly, sim < 0.4 means the
@@ -27,11 +32,16 @@ load_dotenv(ROOT / ".env")
 
 from app.retrieval import Retriever  # noqa: E402
 
+PREVIEW_CHARS = 300
+
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        sys.exit('Usage: python tools/show_hits.py "your question"')
-    question = " ".join(sys.argv[1:])
+    args = sys.argv[1:]
+    full = "--full" in args
+    args = [a for a in args if a != "--full"]
+    if not args:
+        sys.exit('Usage: python tools/show_hits.py [--full] "your question"')
+    question = " ".join(args)
 
     print(f"QUESTION: {question}\n" + "=" * 70)
     hits = Retriever().retrieve(question, k=8, unlocked_records=None)
@@ -50,8 +60,15 @@ def main() -> None:
               f"  vaulted={m.get('vaulted')}")
         if h.spoils:
             print(f"    SPOILS={','.join(h.spoils)}")
-        text = h.text.replace("\n", " ")
-        print(f"    text: {text[:300]}{'...' if len(text) > 300 else ''}")
+        if full:
+            print("    text:")
+            for line in h.text.splitlines():
+                print(f"      {line}")
+        else:
+            text = h.text.replace("\n", " ")
+            cut = len(text) > PREVIEW_CHARS
+            print(f"    text: {text[:PREVIEW_CHARS]}"
+                  f"{'...  [TRUNCATED — use --full to grade]' if cut else ''}")
 
     mix = Counter(h.meta.get("source_type", "?") for h in hits)
     print("\n" + "=" * 70)

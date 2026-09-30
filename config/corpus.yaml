@@ -1,0 +1,19 @@
+# ---------------------------------------------------------------------------
+# Editorial corpus rules. THIS FILE ENCODES JUDGMENT, NOT API DATA.
+#
+# split_sections: lore entries to split into independent sections on wide
+# blank gaps (3+ newlines). Only for entries holding UNRELATED texts in
+# different voices — splitting a continuous story, or a record header from
+# its dialogue, destroys context the model needs.
+#
+# How to extend: run pipeline/extract_chunks.py, read
+# data/chunks/review_splits.txt (every candidate is listed there, marked
+# APPLIED or candidate), and add the ones that are truly mixed-voice —
+# either a whole book, or single entries by lore hash (the number in
+# "lore-<hash>").
+# ---------------------------------------------------------------------------
+
+split_sections:
+  books:
+    - "The Book of Unmaking"     # Hive scripture + Teben Grey's notes
+  lore_hashes: []
