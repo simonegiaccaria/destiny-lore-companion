@@ -8,6 +8,7 @@ questions in eval/), not architectural.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -42,6 +43,61 @@ CONTEXT_HEADER = (
     "not below."
 )
 
+# Follow-up rewriting. Retrieval only sees one string; a follow-up like
+# "yes" or "and her?" carries no content of its own, so without this step
+# retrieval returns near-random records (observed: "si" -> Laminak Li,
+# Failsafe, Soteria). The rewrite is used for RETRIEVAL ONLY; the Ghost
+# still answers the original message with the full history.
+# QUERY_REWRITE in .env: "followups" (default), "always", "off".
+#
+# Known model limit: an Italian follow-up naming a NEW subject ("e la donna
+# di cui parla in The Recluse?") was rewritten back to the previous topic
+# twice, even with the explicit rule below. Hence the safety net in
+# rewrite_query(): the original words always stay in the final query.
+REWRITE_PROMPT = """You turn a Guardian's latest message into a standalone \
+search query for an archive of Destiny lore.
+
+Work in this order:
+1. Translate the latest message into English, word by word in meaning.
+2. Decide what the latest message asks about. THE LATEST MESSAGE DECIDES \
+THE TOPIC. If it names or describes something (a person, a place, "the \
+woman in X", "his brother"), the query is about THAT thing — never swap it \
+for an earlier topic of the conversation.
+3. Use the conversation only to fill in what the latest message leaves \
+unsaid: who "he", "she", "it", "they" is; what a bare "yes" or "tell me \
+more" agrees to.
+
+Output rules:
+- ONE line: the query itself, in English, naming the people, places and \
+things involved.
+- No label ("Search:", "Query:"), no quotes, no preamble, no explanation.
+- Do not answer the question. Do not add facts that are not in the \
+message or the conversation.
+- If the latest message is already self-contained, output its English \
+translation and nothing else."""
+
+REWRITE_MAX_CHARS = 300
+_LABEL_PREFIX = re.compile(r"^\s*(search(\s+query)?|query|rewritten(\s+query)?)"
+                           r"\s*[:\-–—]\s*", re.IGNORECASE)
+
+# Quote verification. After the answer is complete, every quoted passage
+# of meaningful length is looked up in the retrieved records. A quote that
+# is not there verbatim gets a visible warning under the answer: it cannot
+# stop an invented quote, but it stops one from passing as evidence.
+# Observed case: a fabricated "She was a Recluse, through and through…"
+# presented as "the relevant passage".
+#
+# Pairing matters: quote marks are matched left to right in pairs, of ANY
+# length, and only afterwards are short spans (titles like "II: Freedom")
+# discarded. Requiring a minimum length inside the regex made it pair the
+# closing mark of one title with the opening mark of the next, and flag
+# the model's own prose in between as a "quote". A span never crosses a
+# line break, so one unbalanced mark cannot swallow a paragraph.
+_QUOTE = re.compile(r'"([^"\n]*)"|“([^”\n]*)”|«([^»\n]*)»')
+_ELLIPSIS = re.compile(r"\.\.\.|…")
+MIN_QUOTE_NORM_CHARS = 20
+MAX_QUOTE_WARNINGS = 3
+
 
 def _client() -> tuple[OpenAI, str]:
     return (
@@ -55,6 +111,97 @@ def _client() -> tuple[OpenAI, str]:
 def _known(value) -> bool:
     """True if a metadata value carries information worth showing."""
     return value not in (None, "", "unknown", "?", "-", 0)
+
+
+def _norm(text: str) -> str:
+    """Lowercase, letters/digits only: makes quote matching robust to
+    punctuation, curly quotes and whitespace differences."""
+    return re.sub(r"\W+", "", (text or "").lower())
+
+
+def _clip(text: str, limit: int, keep_end: bool) -> str:
+    """Flatten whitespace and cut to `limit` chars. Ghost replies keep their
+    END, because offers ("would you like to hear about…?") come last."""
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    return ("…" + text[-limit:]) if keep_end else (text[:limit] + "…")
+
+
+def _fallback_query(question: str, history: list[dict] | None) -> str:
+    """Deterministic backup: previous Guardian message + current one."""
+    prev = next((m.get("content", "") for m in reversed(history or [])
+                 if m.get("role") == "user"), "")
+    return f"{prev} {question}".strip()
+
+
+def _clean_rewrite(raw: str) -> str:
+    """First line only, without labels or wrapping quotes."""
+    if not raw:
+        return ""
+    line = raw.strip().splitlines()[0].strip()
+    line = _LABEL_PREFIX.sub("", line)
+    return line.strip().strip("\"'“”‘’").strip()
+
+
+def rewrite_query(question: str, history: list[dict] | None) -> str:
+    """Return the string to use for retrieval (see REWRITE_PROMPT).
+
+    The logged value is the FINAL query — the exact string to pass to
+    tools/show_hits.py when grading an answer.
+    """
+    mode = os.environ.get("QUERY_REWRITE", "followups").strip().lower()
+    if mode == "off" or (mode == "followups" and not history):
+        return question
+
+    lines = []
+    for m in (history or [])[-4:]:
+        ghost = m.get("role") != "user"
+        who = "Ghost" if ghost else "Guardian"
+        lines.append(f"{who}: {_clip(m.get('content', ''), 600, keep_end=ghost)}")
+    convo = "\n".join(lines) if lines else "(none)"
+
+    client, model = _client()
+    raw = ""
+    try:
+        resp = client.chat.completions.create(
+            model=model, temperature=0, max_tokens=60,
+            messages=[
+                {"role": "system", "content": REWRITE_PROMPT},
+                {"role": "user", "content": (f"CONVERSATION:\n{convo}\n\n"
+                                             f"LATEST MESSAGE:\n{question}")},
+            ])
+        raw = resp.choices[0].message.content or ""
+    except Exception as e:
+        print(f"[retrieval query] rewrite failed ({type(e).__name__}); "
+              f"using fallback", flush=True)
+
+    out = _clean_rewrite(raw)
+    if not out or len(out) > REWRITE_MAX_CHARS:
+        out = _fallback_query(question, history)     # already contains question
+    elif _norm(question) not in _norm(out):
+        # Safety net: keep the Guardian's own words in the query, so a
+        # rewrite that drops the new subject cannot hide it from retrieval.
+        out = f"{out} {question.strip()}"
+
+    print(f"[retrieval query] {question!r} -> {out!r}", flush=True)
+    return out
+
+
+def unverified_quotes(answer: str, hits) -> list[str]:
+    """Quoted passages in `answer` that do not appear verbatim (modulo
+    punctuation) in any retrieved record. Quotes joined by an ellipsis are
+    checked piece by piece; spans too short to be a quotation (titles,
+    single names) are ignored."""
+    corpus = _norm(" ".join(h.text for h in hits))
+    missing: list[str] = []
+    for match in _QUOTE.finditer(answer):
+        quote = next(g for g in match.groups() if g is not None)
+        pieces = [p for p in _ELLIPSIS.split(quote)
+                  if len(_norm(p)) >= MIN_QUOTE_NORM_CHARS]
+        if pieces and any(_norm(p) not in corpus for p in pieces):
+            missing.append(" ".join(quote.split()))
+    return missing
 
 
 def build_context(hits) -> str:
@@ -94,7 +241,11 @@ def answer_stream(question: str, hits, history: list[dict] | None = None
     """Stream the answer. Errors are yielded as text, not raised: the HTTP
     response has already started with 200 OK by the time this generator
     runs, so an exception here reaches the client as a silently truncated
-    stream — an empty chat box with no diagnosis. Yield instead."""
+    stream — an empty chat box with no diagnosis. Yield instead.
+
+    After the stream completes, quoted passages are checked against the
+    retrieved records and unverified ones are flagged under the answer.
+    """
     client, model = _client()
     base_url = os.environ.get("LLM_BASE_URL", "http://127.0.0.1:11434/v1")
     temperature = float(os.environ.get("LLM_TEMPERATURE", DEFAULT_TEMPERATURE))
@@ -123,10 +274,26 @@ def answer_stream(question: str, hits, history: list[dict] | None = None
         yield f"[Model call failed: {type(e).__name__}: {e}]"
         return
 
+    answer = []
     try:
         for event in stream:
             delta = event.choices[0].delta.content
             if delta:
+                answer.append(delta)
                 yield delta
     except Exception as e:
         yield f"\n\n[Stream interrupted: {type(e).__name__}: {e}]"
+        return
+
+    missing = unverified_quotes("".join(answer), hits)
+    for q in missing:
+        print(f"[quote check] NOT FOUND: {q!r}", flush=True)
+    if missing:
+        shown = missing[:MAX_QUOTE_WARNINGS]
+        lines = "\n".join(f"  “{q[:120]}{'…' if len(q) > 120 else ''}”"
+                          for q in shown)
+        extra = (f"\n  (+{len(missing) - len(shown)} more)"
+                 if len(missing) > len(shown) else "")
+        yield ("\n\n[⚠ Quoted text not found verbatim in the archive records "
+               "used for this answer — a translation or an invention:\n"
+               f"{lines}{extra}]")

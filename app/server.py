@@ -18,8 +18,8 @@ from pydantic import BaseModel
 ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT / ".env")
 
-from app.llm import answer_stream            # noqa: E402
-from app.retrieval import Retriever          # noqa: E402
+from app.llm import answer_stream, rewrite_query   # noqa: E402
+from app.retrieval import Retriever                # noqa: E402
 
 app = FastAPI(title="Destiny Lore Companion")
 retriever: Retriever | None = None
@@ -40,7 +40,10 @@ class ChatIn(BaseModel):
 
 @app.post("/chat")
 def chat(payload: ChatIn):
-    hits = retriever.retrieve(payload.question, k=8, unlocked_records=None)
+    # Retrieval needs a self-contained query ("si" alone retrieves noise);
+    # the Ghost still answers the original message, with full history.
+    query = rewrite_query(payload.question, payload.history)
+    hits = retriever.retrieve(query, k=8, unlocked_records=None)
     return StreamingResponse(
         answer_stream(payload.question, hits, payload.history),
         media_type="text/plain; charset=utf-8")
