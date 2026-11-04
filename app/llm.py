@@ -43,6 +43,26 @@ CONTEXT_HEADER = (
     "not below."
 )
 
+# End-of-message reminder. Measured on the T=0.2 x3 baseline: Italian
+# questions answered in English on 3 of 5 questions (6/15 repeats OK),
+# lists in 41/90 answers, frame breaks in 35/90. The rules are already in
+# the system prompt; the reminder repeats the three most-violated ones
+# right after the question, where the model reads last. Whether position
+# matters for this model is the hypothesis being tested, not a known fact.
+# ANSWER_REMINDER in .env: "on" (default) or "off" (for A/B runs).
+# Same word lists as eval/run_eval.py, so the app and the check agree.
+_IT_WORDS = re.compile(r"\b(il|lo|la|gli|le|di|che|è|non|una|per|sono|"
+                       r"della|del|nel|con|come|anche|questo|questa)\b",
+                       re.IGNORECASE)
+_EN_WORDS = re.compile(r"\b(the|and|of|is|that|to|was|with|for|this|"
+                       r"are|his|her|in|as|it)\b", re.IGNORECASE)
+LANGUAGE_NAMES = {"it": "Italian", "en": "English"}
+REMINDER = ("(Answer in {language}. Speak as the Ghost, from inside the "
+            "world, in flowing prose: no numbered lists, no bold headings. "
+            "Use only the archive records above; where they are silent, "
+            "say so.)")
+REMINDER_UNKNOWN_LANGUAGE = "the language of the Guardian's question"
+
 # Follow-up rewriting. Retrieval only sees one string; a follow-up like
 # "yes" or "and her?" carries no content of its own, so without this step
 # retrieval returns near-random records (observed: "si" -> Laminak Li,
@@ -126,6 +146,38 @@ def _clip(text: str, limit: int, keep_end: bool) -> str:
     if len(text) <= limit:
         return text
     return ("…" + text[-limit:]) if keep_end else (text[:limit] + "…")
+
+
+def _detect_language(text: str) -> str | None:
+    """'it', 'en' or None (too short / tied), by function-word counts."""
+    it = len(_IT_WORDS.findall(text or ""))
+    en = len(_EN_WORDS.findall(text or ""))
+    if it == en:
+        return None
+    return "it" if it > en else "en"
+
+
+def question_language(question: str, history: list[dict] | None) -> str | None:
+    """Language of the question; a bare follow-up ("si", "ok") inherits the
+    language of the Guardian's most recent message that has one."""
+    lang = _detect_language(question)
+    if lang:
+        return lang
+    for m in reversed(history or []):
+        if m.get("role") == "user":
+            lang = _detect_language(m.get("content", ""))
+            if lang:
+                return lang
+    return None
+
+
+def answer_reminder(question: str, history: list[dict] | None) -> str:
+    """Reminder appended after the question; empty if disabled."""
+    if os.environ.get("ANSWER_REMINDER", "on").strip().lower() == "off":
+        return ""
+    lang = question_language(question, history)
+    language = LANGUAGE_NAMES.get(lang, REMINDER_UNKNOWN_LANGUAGE)
+    return "\n\n" + REMINDER.format(language=language)
 
 
 def _fallback_query(question: str, history: list[dict] | None) -> str:
@@ -255,7 +307,8 @@ def answer_stream(question: str, hits, history: list[dict] | None = None
         "role": "user",
         "content": (f"{CONTEXT_HEADER}\n\n{build_context(hits)}\n\n"
                     f"=== END OF ARCHIVE RECORDS ===\n\n"
-                    f"GUARDIAN'S QUESTION:\n{question}"),
+                    f"GUARDIAN'S QUESTION:\n{question}"
+                    f"{answer_reminder(question, history)}"),
     })
 
     try:

@@ -5,3 +5,6 @@ data/
 __pycache__/
 *.pyc
 .DS_Store
+eval/runs/*
+!eval/runs/TEMPLATE.csv
+.claude/settings.local.json
